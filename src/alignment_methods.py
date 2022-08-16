@@ -300,7 +300,7 @@ def boyer_moore(a, b):
     return match_positions          
 
 def main():
-    PATH = "C:/Users/pierre/Documents/Jupyter_workspace/python_script/training_align/test.fasta"
+    PATH = "/home/pierre/git/Alignements_methods/test/test.fasta"
     myfasta = read_fasta(PATH)
     # a = myfasta[">seq_3A"]
     # b = myfasta[">seq_3B"]
