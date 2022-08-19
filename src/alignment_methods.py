@@ -342,6 +342,32 @@ if __name__ == "__main__":
 #   - invalid nucleotides
 #   - match on first/last
 #   - overlapping matches
+    
+# - implement "repeat" compression format for DNA (such as A5T3CG12)
+#   use it to store and search for substring
+#   store those substring in alphabetical order
+    
+# - binary compression with two "overlaping" 16 bit 0101 0101 0101 0001
+#   - first define if is it a purine or a pyrimidine
+#   - second define if it is default pur/pyr (defautlt pur = A default pyr = T 
+#     for ex while G and C are 1 pur/pyr)
+#   - A 16 bit encoded car will take 16 bit space (duh) -> 2 nucleotides encoded on 32 bits
+#   - With this system 32 bits bit will encode for 16 nucleotides (so 8 times compression)
+#   - but in case of long repeats coding for them as two car (e.g. A9) so 32 bits
+#     lead to better compression.
+#   - a first (third) byte could be used for storing repeated position
+
+#   - with 16 bit = a byte
+#     in case of repeated sequence
+#         REPEAT       BINARY
+# 1 nuc   1 byte       2 byte 
+# 9 nuc   2 byte       2 byte
+# 16 nuc  3 byte       2 byte
+# 99 nuc  3 byte       28 bytes
+#     the longest the repeat the worst performs binary compression compared to
+#     repeat
+
+
 
 # - implement indexing (kmer...) for Offline algo
 
