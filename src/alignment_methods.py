@@ -6,65 +6,10 @@ Created on Sun Aug  7 17:06:27 2022
 """
 
 import sys
-from time import time
+from tools import timer, read_fasta, sequence_is_valid, reverse 
+from tools import split_seq, AlignedPair
 
-def timer(func):
-    """
-    A function timer decorator
 
-    """
-    def wrapper(*args, **kwargs):
-        start = time()
-        result = func(*args, **kwargs)
-        stop = time()
-        print("{} executed in {:.4f} s\n".format(func.__name__, (stop-start)))
-        return result
-    return wrapper
-
-def read_fasta(file_path):
-    """
-    - Open and read a fasta formated file (!ONE LINE PER SEQUENCE!)
-    - Return a dictionary where k,v are seq. names and seq.data respectively
-    """
-    sequences = {}
-    with open(file_path, "r") as f:
-        for line in f:
-            line = line.rstrip()
-            if line[0] != ">":
-                sys.exit("Not a fasta file")
-            seq_name = line
-            line = f.readline().rstrip()
-            sequences[seq_name] = line
-    return sequences    
-        
-def print_fasta(fasta_sequences):
-    for name, seq in fasta_sequences.items():
-        print(name, "\n", seq[:len(name)], sep="")
-
-def sequence_is_valid(sequence):
-    assert len(sequence) > 0, "Sequence of lenght 0" 
-    for car in sequence: 
-        if car not in ["A", "C", "G", "T"]:
-            return False
-    return True   
-
-def reverse(string):
-    """
-    Return a reversed string
-    """
-    string = "".join(reversed(str(string)))
-    return string
-
-def complement(seq):
-    """
-    Take a nucleotide sequence and returns the complement sequence.
-    """
-    assert sequence_is_valid(seq), "Sequence format invalid"
-    comp =  ""
-    nuc_comp = {"A" : "T", "T" : "A", "C" : "G", "G" : "C"}
-    for nuc in seq:
-        comp += nuc_comp[nuc]
-    return comp
 
 @timer
 def naive_exact_matching(a, b):
@@ -192,31 +137,6 @@ class BadCarIndex:
         else:
             return None           
 
-class AlignRes:
-    """
-    Used to print the results of an alignment
-    - a : seq la plus longue (genref)
-    - b : seq qu'on cherche a trouver dans a (read)
-    - match_pos : une liste de position (dans a evidemment) ou y'a match
-    """
-    def __init__(self, a, b, match_pos : list):
-        assert sequence_is_valid(a), "Sequence format invalid"
-        assert sequence_is_valid(b), "Sequence format invalid"
-        self.a = a
-        self.b = b
-        self.pos = match_pos if match_pos else []
-    def __str__(self):
-        output = "ALIGNMENT RESULTS :\n"
-        if not self.pos:
-            output += "No results"
-            return output
-        for i, pos in enumerate(self.pos):
-            assert pos > 0 , "Match position error (negative)"
-            assert pos <= len(self.a) - len(self.b) + 1 , "Match position error (out of bound)"
-            output += "# Alignment {} at position {} :\n".format(i+1, pos)
-            output += self.a + "\n" + "-"*pos + self.b + "-"*(len(self.a)-len(self.b)-pos)+"\n"
-        return output
-
 @timer
 def bad_car_exact_matching(a, b):
     """
@@ -242,13 +162,14 @@ def bad_car_exact_matching(a, b):
     return match_positions
 
 @timer
-def boyer_moore(a, b):
+def boyer_moore(a, b, verbose = False):
     """
     Boyer Moore Exact Matching: skips useless alignment check by using
     - bad caracter rule
     - good suffix rule
     - a = "long" sequence (ref genome)
     - b = "short" sequence (read)
+    - returns a list of numbers : the starting indexes of matches within "a"  
     """
     assert sequence_is_valid(a), "Sequence format invalid"
     assert sequence_is_valid(b), "Sequence format invalid"
@@ -298,50 +219,85 @@ def boyer_moore(a, b):
                 match_positions.append(i)
                 i += 1
     return match_positions          
-
-def main():
+ 
+def inexact_matching(ref_gen, read_sq, mismatch_nbr = 1, verbose = False):
+    """
+    Inexact matching by applying pigeon hole principle to Boyer Moore algorithm 
+    - ref_gen  = "long" sequence (reference genome)
+    - read_sq = "short" sequence (read)
+    - mismatch_nbr = number of allowed mismatch
+    """
+    assert sequence_is_valid(ref_gen), "Sequence format invalid"
+    assert sequence_is_valid(read_sq), "Sequence format invalid"
+    match_positions  = set()
+    match_candidates = set()
+    # pigeon hole : for inexact matching. Split the read into n parts
+    # where n = mismatch_nbr + 1. eg. for 2 mismatches allowed split in 3 parts
+    for split_pos, part in  split_seq(read_sq, mismatch_nbr):
+        # find an exact match on a part of ref_sq -> its a possible inexact match
+        for matching_part_pos in boyer_moore(ref_gen, part):
+            # record the starting point of the whole read within the ref_gen 
+            match_candidates.add(matching_part_pos - split_pos)
+    # check whether the edit distance for the complete read is still within bounds
+    for pos in match_candidates:
+        res = AlignedPair(ref_gen, read_sq, pos, trim = 1)
+        if res.get_edist() <= mismatch_nbr:
+            match_positions.add(pos)
+    if verbose:
+        print("{} matches found at positions {}\n".format(len(match_positions), sorted(match_positions)))
+    return sorted(match_positions)
+        
+def do_tests():
     PATH = "/home/pierre/git/Alignements_methods/test/test.fasta"
     myfasta = read_fasta(PATH)
-    # a = myfasta[">seq_3A"]
-    # b = myfasta[">seq_3B"]
+    a = myfasta[">seq_7A"]
+    b = myfasta[">seq_7B"]
     
-    # print("Naive exact matching")
-    # print(AlignRes(a, b, naive_exact_matching(a, b)))
+    #print(myfasta)
+    print("sequences are :\n{}\n{}".format(a, b))
+    #res = inexact_matching(a, b, mismatch_nbr = 2, verbose = True)
+    #print("res = ", res)
+    #for pos in res:
+    #    print("Match at position {}:\n{}".format(pos, AlignedPair(a, b, pos)))
+    
 
-    # print("Bad caracter rule exact matching")
-    # print(AlignRes(a, b, bad_car_exact_matching(a, b)))
-    
-    #a = myfasta[">seq_4A"]
-    #b = myfasta[">seq_4B"]
-    #print("Naive exact matching")
-    #print(AlignRes(a, b, naive_exact_matching(a, b)))
-    #print("Bad caracter rule exact matching")
-    #print(AlignRes(a, b, bad_car_exact_matching(a, b)))
-    
-    a = myfasta[">seq_6A"]
-    b = myfasta[">seq_6B"]
-    #print(AlignRes(a, b, bad_car_exact_matching(a, b)))
-    #print(a[8])
-    #print(b)
-    
-    print("Boyer Moore Exact Matching")
-    print(AlignRes(a, b, boyer_moore(a, b)))
-    print(AlignRes(a, b, []))
+def main():
+    do_tests()
 
 if __name__ == "__main__":
     main()
-    
+       
+###############    
+# TO DO NEXT ->
+###############
 
+# - push to git
     
+# - check for and comment out unused tools from tools.py
+
+# - implement inexact matching with gaps
+
+# - implement indexing
+
+# - gerer le @timer avec verbose
     
+# - gerer la verbosite
     
-# NEXT
+# - gerer l'impression de resultats/alignements
+
+# - gerer l'edist quand les read debordent du gen_ref
+
+# - check what to do when a match position results in two seq without overlap
+
+# - implement trim = 2 dans class AlignedPair
 
 # - implement test including 
 #   - empty sequence/file
 #   - invalid nucleotides
 #   - match on first/last
 #   - overlapping matches
+#   - different lengths seq
+#   - sticking out alignment/matches
     
 # - implement "repeat" compression format for DNA (such as A5T3CG12)
 #   use it to store and search for substring
@@ -367,14 +323,25 @@ if __name__ == "__main__":
 #     the longest the repeat the worst performs binary compression compared to
 #     repeat
 
-
-
 # - implement indexing (kmer...) for Offline algo
 
 # - implement approximate matching with edit distance
 
-# - implement approximate matching with pigeon hole
+# - a gui with kivy ? 
 
-# - a gui with kivy ?
+# - check existence of interactions GODOT-PYTHON for gui
+
     
+##############
+# DONE \(^_^)/
+##############
     
+# DONE : - read fasta bug si ligne vide dans le fichier (a la fin aussi)
+# DONE : - implement approximate matching with pigeon hole
+# DONE : - implement different lenght edit distance computation
+# DONE : - fix the import
+# DONE : gerer quand les read debordent dans inexact matching
+# DONE : - take the tools from tools.py (reverse, split seq...)    
+# DONE : - implement same lenght edit distance computation
+# DONE : - fix the AlignRes class so that reads can stick out from the ref genome   
+# DONE : - gerer l'affichage des align quand les read debordent
